@@ -72,7 +72,13 @@ export default defineConfig({
     nav: [
       { text: "首页", link: "/" },
       { text: "指南", link: "/guide/getting-started" },
-      { text: "社区", link: "/community" },
+      {
+        text: "社区",
+        items: [
+          { text: "打开统计", link: "/community" },
+          { text: "需求墙", link: "/feature-wall" },
+        ],
+      },
       {
         text: "参考",
         items: [
@@ -116,6 +122,24 @@ export default defineConfig({
             { text: "HTTP API", link: "/reference/http-api" },
             { text: "MCP", link: "/reference/mcp" },
             { text: "遥测", link: "/reference/telemetry" },
+          ],
+        },
+      ],
+      "/community": [
+        {
+          text: "社区",
+          items: [
+            { text: "打开统计", link: "/community" },
+            { text: "需求墙", link: "/feature-wall" },
+          ],
+        },
+      ],
+      "/feature-wall": [
+        {
+          text: "社区",
+          items: [
+            { text: "打开统计", link: "/community" },
+            { text: "需求墙", link: "/feature-wall" },
           ],
         },
       ],

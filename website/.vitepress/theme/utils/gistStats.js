@@ -14,6 +14,7 @@
 export const GIST_OWNER = "hanliang97";
 export const GIST_ID = "9bd67e622baa655abf30cc151f0fcf5a";
 export const OPENS_FILE = "events.json";
+export const REQ_FILE = "requirements.json";
 
 const RAW_BASE = `https://gist.githubusercontent.com/${GIST_OWNER}/${GIST_ID}/raw`;
 const API_URL = `https://api.github.com/gists/${GIST_ID}`;
@@ -131,4 +132,37 @@ export async function loadGistEvents(file, opts = {}) {
   } finally {
     inflight.delete(key);
   }
+}
+
+/**
+ * 将完整数组写回 gist 的指定文件（需要 gist 权限的 token，通常是维护者）。
+ * 注意：GitHub Gist 不支持协作，只有 gist 所有者的 token 才能 PATCH。
+ * @param {string} file 文件名，如 requirements.json
+ * @param {any[]} data 要写入的完整数组
+ * @param {string} token GitHub Personal Access Token（gist 权限）
+ */
+export async function saveGistFile(file, data, token) {
+  if (!token) throw new Error("缺少 GitHub Token");
+  const res = await fetch(API_URL, {
+    method: "PATCH",
+    headers: {
+      Authorization: `Bearer ${token.trim()}`,
+      Accept: "application/vnd.github+json",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      files: { [file]: { content: JSON.stringify(data, null, 2) } },
+    }),
+  });
+  if (!res.ok) {
+    let msg = `GitHub API ${res.status}`;
+    try {
+      const j = await res.json();
+      if (j && j.message) msg = `${j.message}（${res.status}）`;
+    } catch (_) {}
+    throw new Error(msg);
+  }
+  // 写入成功后同步更新本地缓存
+  writeCache(file, data);
+  return res.json();
 }

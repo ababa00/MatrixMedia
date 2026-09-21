@@ -3,6 +3,7 @@ import { h } from 'vue'
 import './custom.css'
 import ActiveUsersBoard from './components/ActiveUsersBoard.vue'
 import HomeOpenCount from './components/HomeOpenCount.vue'
+import FeatureWall from './components/FeatureWall.vue'
 
 export default {
   extends: DefaultTheme,
@@ -14,5 +15,6 @@ export default {
   },
   enhanceApp({ app }) {
     app.component('ActiveUsersBoard', ActiveUsersBoard)
+    app.component('FeatureWall', FeatureWall)
   }
 }

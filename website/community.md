@@ -5,6 +5,11 @@ description: 矩媒 MatrixMedia 匿名打开次数统计看板（基于 GitHub G
 
 # 社区 · 打开统计
 
+<div class="community-tabs">
+  <a href="/community" class="community-tab community-tab-active">打开统计</a>
+  <a href="/feature-wall" class="community-tab">需求墙</a>
+</div>
+
 本页展示所有打开过 MatrixMedia Electron 应用的**匿名**统计数据。数据通过 GitHub API 从一个公开 Gist 读取，每次应用启动（GUI / CLI）会追加一条事件，**不做去重**，仅记录"打开"这一动作。
 
 <ActiveUsersBoard />
@@ -34,5 +39,6 @@ description: 矩媒 MatrixMedia 匿名打开次数统计看板（基于 GitHub G
    - `MATRIXMEDIA_GIST_TOKEN=<token>`
    或把 token 放到 `~/.matrixmedia/gist-token` 文件中。
 5. 在 `website/.vitepress/theme/utils/gistStats.js` 中把 `GIST_ID`、`GIST_OWNER` 填为同一 gist 的 id 与所属用户名。
+6. 需求墙共用同一 gist：再创建一个文件 `requirements.json`，初始内容为 `[]`。
 
 详见 [遥测参考](/reference/telemetry)。
