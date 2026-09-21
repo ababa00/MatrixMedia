@@ -387,6 +387,10 @@ onMounted(() => { fetchList() })
             <div v-if="detail.updatedAt && detail.updatedAt !== detail.createdAt">
               <span class="fw-meta-k">更新时间</span>{{ fmtDate(detail.updatedAt) }}
             </div>
+            <div v-if="detail.issueUrl">
+              <span class="fw-meta-k">相关 Issue</span>
+              <a :href="detail.issueUrl" target="_blank" rel="noopener" @click.stop>#{{ detail.issueNumber || '查看' }}</a>
+            </div>
           </div>
           <div class="fw-modal-desc">{{ detail.description }}</div>
         </div>

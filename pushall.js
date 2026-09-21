@@ -7,10 +7,12 @@
  *    —— deb / rpm / linux arm64 交给 CI（.github/workflows/build.yml）
  * 5. 直接调用 upload-gitee.js 把 .exe/.dmg/.tar.gz 上传到 Gitee Release（token 从 .token 读取）
  *    超 Gitee 100MB 单文件上限的产物（如 AppImage）自动跳过
+ * 6. 同步需求墙：把 [需求墙] Issue 同步进 Gist requirements.json（scripts/sync-requirements.js）
  *
  * 用法:
  *   node pushall.js [patch|minor|major] [--platforms=all|mac|win|linux|mac,win,...]
  *                   [--skip-bump] [--skip-git] [--skip-build] [--skip-upload]
+ *                   [--skip-sync-req]
  *
  *   默认 patch + --platforms=all。要求工作区干净。
  *
@@ -46,6 +48,7 @@ const SKIP_BUMP = hasFlag("skip-bump");
 const SKIP_GIT = hasFlag("skip-git");
 const SKIP_BUILD = hasFlag("skip-build");
 const SKIP_UPLOAD = hasFlag("skip-upload");
+const SKIP_SYNC_REQ = hasFlag("skip-sync-req");
 const PLATFORMS = parsePlatforms(getOpt("platforms", "all"));
 
 function parsePlatforms(spec) {
@@ -253,6 +256,18 @@ function uploadToGitee(token, version, files, releaseBody) {
   if (res.status !== 0) throw new Error("upload-gitee.js 上传失败");
 }
 
+// 同步需求墙（Issue → Gist requirements.json），best-effort：失败不阻断发布
+function syncRequirementWall() {
+  console.log("同步需求墙（[需求墙] Issue → Gist）...");
+  const res = spawnSync("node", ["scripts/sync-requirements.js"], {
+    cwd: ROOT,
+    stdio: "inherit",
+  });
+  if (res.status !== 0) {
+    console.warn("  ⚠️ 需求墙同步失败（不影响本次发布，可稍后单独执行 node scripts/sync-requirements.js）");
+  }
+}
+
 function main() {
   assertCleanWorkingTree();
 
@@ -329,6 +344,13 @@ function main() {
     uploadToGitee(giteeToken, nextVersion, files, releaseBody);
   } else {
     console.log("跳过 Gitee 上传");
+  }
+
+  // 同步需求墙
+  if (!SKIP_SYNC_REQ) {
+    syncRequirementWall();
+  } else {
+    console.log("跳过需求墙同步");
   }
 
   console.log(`\n✅ 完成。当前分支: main，版本: v${nextVersion}`);
