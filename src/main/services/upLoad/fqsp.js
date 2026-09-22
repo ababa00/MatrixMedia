@@ -1,5 +1,6 @@
 import path from "path";
 import maybeClosePublishWindow from "./closeWindow.js";
+import { replyPublishFailure } from "./publishOutcome.js";
 import {
   WAIT_SELECTOR_APPEAR_MS,
   WAIT_UPLOAD_PROCESSING_MS,
@@ -556,11 +557,12 @@ export default async function (page, data, window, event) {
   } catch (error) {
     const detail = getErrorMessage(error);
     console.error(`[fqsp] 番茄视频发布失败，阶段：${publishStage}`, error);
-    event.reply("puppeteerFile-done", {
-      ...data,
-      status: false,
+    await replyPublishFailure({
+      page,
+      data,
+      window,
+      event,
       message: `上传失败：${publishStage} - ${detail}`,
     });
-    maybeClosePublishWindow(data, window);
   }
 }

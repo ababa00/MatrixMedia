@@ -668,6 +668,8 @@ export default {
               republishCount: oldRepublish + 1,
               publishMode: "publish",
               publishStatus: "publishing",
+              // 重发开始即清掉上次失败截图，避免显示的是上一轮的旧画面
+              failScreenshot: "",
               lastPublishMessage: "等待发布结果",
               lastPublishAt: Date.now(),
             },

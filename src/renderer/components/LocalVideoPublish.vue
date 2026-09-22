@@ -1599,6 +1599,8 @@ export default {
               republishCount: oldRepublish + 1,
               publishMode: effectiveMode.publishMode,
               publishToDraft: effectiveMode.publishToDraft,
+              // 重发开始即清掉上次失败截图，避免显示的是上一轮的旧画面
+              failScreenshot: "",
               publishStatus: effectiveMode.publishToDraft
                 ? "drafting"
                 : "publishing",

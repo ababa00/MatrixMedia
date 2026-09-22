@@ -1,5 +1,9 @@
 import path from "path";
-import { readPageUrl, replyPublishOutcome } from "./publishOutcome.js";
+import {
+  readPageUrl,
+  replyPublishFailure,
+  replyPublishOutcome,
+} from "./publishOutcome.js";
 import {
   isCreativeStatementNone,
   resolveTtCreativeStatementLabel,
@@ -783,10 +787,13 @@ export default async function (page, data, window, event) {
   } catch (e) {
     const detail = getErrorMessage(e);
     console.error(`❌ 头条发布失败，阶段：${publishStage}`, e);
-    event.reply("puppeteerFile-done", {
-      ...data,
-      status: false,
+    await replyPublishFailure({
+      page,
+      data,
+      window,
+      event,
       message: `上传失败：${publishStage} - ${detail}`,
+      closeWindow: false,
     });
   }
 }

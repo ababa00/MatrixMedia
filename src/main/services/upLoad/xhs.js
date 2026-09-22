@@ -1,6 +1,9 @@
 import path from "path";
-import maybeClosePublishWindow from "./closeWindow.js";
-import { readPageUrl, replyPublishOutcome } from "./publishOutcome.js";
+import {
+  readPageUrl,
+  replyPublishFailure,
+  replyPublishOutcome,
+} from "./publishOutcome.js";
 import {
   isCreativeStatementNone,
   resolveXhsCreativeStatementLabel,
@@ -543,14 +546,15 @@ export default async function (page, data, window, event) {
         : data,
     });
   } catch (err) {
-    event.reply("puppeteerFile-done", {
-      ...data,
-      status: false,
+    // 失败瞬间截图留证：小红书风控弹窗（如「操作过于频繁」）只有截图能看出来
+    await replyPublishFailure({
+      page,
+      data,
+      window,
+      event,
       message: err?.message || "上传失败",
+      closeWindow: data.closeWindowAfterPublish !== false,
     });
-    if (data.closeWindowAfterPublish !== false) {
-      maybeClosePublishWindow(data, window);
-    }
     console.error("❌ 小红书发布失败:", err);
   }
 }

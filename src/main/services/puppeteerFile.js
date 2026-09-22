@@ -19,6 +19,13 @@ import { resolveChromePath } from "./chromeConfig.js";
 import xhsChromeHandler from "./upLoad/xhsChrome.js";
 import { isPlatformLoginUrl } from "../../shared/platformPageState.js";
 import { normalizeVideoMetadata } from "../../shared/videoMetadata.js";
+import {
+  FAIL_SCREENSHOT_RETENTION_DAYS,
+  buildFailScreenshotName,
+  capturePublishFailureScreenshot,
+  getFailScreenshotDir,
+  pruneFailScreenshots,
+} from "./upLoad/failureScreenshot.js";
 
 import StealthPlugin from "puppeteer-extra-plugin-stealth";
 
@@ -326,6 +333,42 @@ async function doUpload(data, transport, queueDone, runtimeTask) {
   // 小红书 + 真实 Chrome 浏览器发布（替代 Electron BrowserWindow）
   let _xhsRealChromeFallback = false;
 
+  /**
+   * 任务终结前截一张发布页，作为失败原因的证据。
+   *
+   * 这些分支（URL 不匹配 / 页面异常 / 拿不到处理器）里 page 往往已经失效或窗口
+   * 正在关闭，先用 page 试，再回退到 activeWin 的 webContents.capturePage()。
+   * 整个函数绝不抛错 —— 截图只是辅助信息，不能影响失败回执本身。
+   */
+  const snapshotForFailure = async () => {
+    try {
+      const fromPage = await capturePublishFailureScreenshot(page, data);
+      if (fromPage) return fromPage;
+      if (!activeWin || activeWin.isDestroyed()) return "";
+      const image = await activeWin.webContents.capturePage();
+      if (!image || image.isEmpty()) return "";
+      const dir = getFailScreenshotDir();
+      await fs.promises.mkdir(dir, { recursive: true });
+      const file = path.join(dir, buildFailScreenshotName(data));
+      await fs.promises.writeFile(file, image.toPNG());
+      console.log(`[fail-shot] 已保存发布失败截图: ${file}`);
+      pruneFailScreenshots(dir, FAIL_SCREENSHOT_RETENTION_DAYS, Date.now());
+      return file;
+    } catch (e) {
+      console.warn("[fail-shot] 兜底截图失败:", (e && e.message) || e);
+      return "";
+    }
+  };
+
+  /** 带截图路径的失败回执（没有截到图时不带该字段） */
+  const replyFailureWithShot = async (payload) => {
+    const shot = await snapshotForFailure();
+    safeReply("puppeteerFile-done", {
+      ...payload,
+      ...(shot ? { failScreenshot: shot } : {}),
+    });
+  };
+
   const runXhsRealChrome = async () => {
     if (finished) return;
     let realBrowser = null;
@@ -540,7 +583,11 @@ async function doUpload(data, transport, queueDone, runtimeTask) {
     if (currentAttempt > maxRetries) {
       console.log("已达到最大重试次数，操作失败", data);
       safeReply("puppeteer-noLogin", data);
-      safeReply("puppeteerFile-done", { ...data, status: false });
+      await replyFailureWithShot({
+        ...data,
+        status: false,
+        message: "已达到最大重试次数，发布失败",
+      });
       finishOnce();
       return;
     }
@@ -860,6 +907,7 @@ async function doUpload(data, transport, queueDone, runtimeTask) {
         }
         if (currentAttempt >= maxRetries) {
           safeReply("puppeteer-noLogin", data);
+          // 窗口此刻已销毁，页面截不到图，直接回执
           safeReply("puppeteerFile-done", {
             ...data,
             status: false,
@@ -886,7 +934,7 @@ async function doUpload(data, transport, queueDone, runtimeTask) {
               console.warn(
                 `未找到平台处理器: ${data.pt}，跳过重试直接结束任务`
               );
-              safeReply("puppeteerFile-done", {
+              await replyFailureWithShot({
                 ...data,
                 status: false,
                 message: `未找到平台处理器: ${data.pt}`,
@@ -916,7 +964,7 @@ async function doUpload(data, transport, queueDone, runtimeTask) {
               return;
             }
             if (isXhsTask) {
-              safeReply("puppeteerFile-done", {
+              await replyFailureWithShot({
                 ...data,
                 status: false,
                 message: `小红书页面地址异常，已保留窗口: ${currentUrl}`,
@@ -934,7 +982,7 @@ async function doUpload(data, transport, queueDone, runtimeTask) {
           console.log(`尝试${currentAttempt}执行平台逻辑失败:`, err);
           const failurePayload = err && err._mmUploadFailurePayload;
           if (currentAttempt >= maxRetries) {
-            safeReply("puppeteerFile-done", {
+            await replyFailureWithShot({
               ...data,
               ...failurePayload,
               status: false,
@@ -956,7 +1004,7 @@ async function doUpload(data, transport, queueDone, runtimeTask) {
         error && /代理/.test(String(error.message || error));
       if (proxyConfigError) {
         console.log(`尝试${currentAttempt}代理配置错误:`, error);
-        safeReply("puppeteerFile-done", {
+        await replyFailureWithShot({
           ...data,
           status: false,
           message: error.message || "代理配置错误",
@@ -966,7 +1014,7 @@ async function doUpload(data, transport, queueDone, runtimeTask) {
       }
       console.log(`尝试${currentAttempt}发生错误:`, error);
       if (isXhsTask) {
-        safeReply("puppeteerFile-done", {
+        await replyFailureWithShot({
           ...data,
           status: false,
           message: error.message || "小红书任务异常，已保留窗口",

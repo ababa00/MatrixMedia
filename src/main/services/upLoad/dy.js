@@ -1,6 +1,10 @@
 import path from "path";
 import { resolveDyCreativeStatementLabel } from "../../../shared/creativeStatement.js";
-import { readPageUrl, replyPublishOutcome } from "./publishOutcome.js";
+import {
+  readPageUrl,
+  replyPublishFailure,
+  replyPublishOutcome,
+} from "./publishOutcome.js";
 import {
   WAIT_SELECTOR_APPEAR_MS,
   WAIT_UPLOAD_PROCESSING_MS,
@@ -246,10 +250,14 @@ export default async function (page, data, window, event) {
     });
   } catch (e) {
     const detail = (e && e.message) || String(e);
-    event.reply("puppeteerFile-done", {
-      ...data,
-      status: false,
+    await replyPublishFailure({
+      page,
+      data,
+      window,
+      event,
       message: detail.length > 200 ? `${detail.slice(0, 200)}…` : detail,
+      // 抖音发布失败后窗口是否关闭沿用原行为（上游统一处理）
+      closeWindow: false,
     });
     console.error("❌ 上传失败", e);
   }

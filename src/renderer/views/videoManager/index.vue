@@ -67,12 +67,27 @@
                     <span class="progress-count success"
                       >成功 {{ normalizeCount(sub.publishSuccessCount) }}</span
                     >
-                    <span class="progress-count fail"
+                    <span
+                      class="progress-count fail"
+                      :class="{ 'fail-clickable': hasFailScreenshot(sub) }"
+                      :title="
+                        hasFailScreenshot(sub)
+                          ? '点击查看发布失败时的页面截图'
+                          : ''
+                      "
+                      @click="hasFailScreenshot(sub) && openFailScreenshot(row, sub)"
                       >失败 {{ normalizeCount(sub.publishFailCount) }}</span
                     >
                     <span
                       v-if="normalizeCount(sub.publishAbnormalCount) > 0"
                       class="progress-count fail"
+                      :class="{ 'fail-clickable': hasFailScreenshot(sub) }"
+                      :title="
+                        hasFailScreenshot(sub)
+                          ? '点击查看发布异常时的页面截图'
+                          : ''
+                      "
+                      @click="hasFailScreenshot(sub) && openFailScreenshot(row, sub)"
                       >异常
                       {{ normalizeCount(sub.publishAbnormalCount) }}</span
                     >
@@ -126,6 +141,48 @@
       </template>
     </div>
 
+    <!-- 发布失败截图：点记录里的「失败 / 异常」次数打开 -->
+    <el-dialog
+      title="发布失败截图"
+      :visible.sync="screenshotDialogVisible"
+      width="72%"
+      top="6vh"
+      append-to-body
+    >
+      <div v-loading="screenshotLoading" class="shot-body">
+        <div v-if="screenshotPath" class="shot-path">{{
+          failScreenshotName(screenshotPath)
+        }}</div>
+        <img
+          v-if="screenshotDataUrl"
+          :src="screenshotDataUrl"
+          class="shot-img"
+          alt="发布失败截图"
+        />
+        <el-alert
+          v-else-if="screenshotError && !screenshotLoading"
+          :title="screenshotError"
+          type="warning"
+          :closable="false"
+          show-icon
+        />
+        <div
+          v-else-if="!screenshotLoading"
+          class="shot-empty"
+        >
+          暂无截图
+        </div>
+      </div>
+      <div slot="footer">
+        <el-button size="mini" @click="openFailScreenshotExternally"
+          >用系统看图打开</el-button
+        >
+        <el-button type="primary" size="mini" @click="screenshotDialogVisible = false"
+          >关闭</el-button
+        >
+      </div>
+    </el-dialog>
+
     <!-- 旧的 <webview> 登录弹窗已迁移到主进程独立 BrowserWindow -->
   </div>
 </template>
@@ -156,6 +213,12 @@ export default {
       statusLoadingMap: {},
       loginData: {},
       showLoginDialog: false,
+      // 发布失败截图弹窗
+      screenshotDialogVisible: false,
+      screenshotLoading: false,
+      screenshotDataUrl: "",
+      screenshotError: "",
+      screenshotPath: "",
     };
   },
   mounted() {
@@ -278,6 +341,67 @@ export default {
     normalizeCount(v) {
       const n = Number(v);
       return Number.isFinite(n) && n >= 0 ? n : 0;
+    },
+    // ── 发布失败截图 ────────────────────────────────────────────
+    // 主进程在平台 handler 失败、或「发布会话疑似没发出去」时截图，
+    // 文件名随 donePayload.failScreenshot 返回。这里只负责落库 + 展示。
+    pickFailScreenshot(payload, row) {
+      const shot = payload && payload.failScreenshot;
+      if (shot) return String(shot);
+      return String((row && row.failScreenshot) || "");
+    },
+    hasFailScreenshot(row) {
+      return !!this.getFailScreenshot(row);
+    },
+    /** 详情里的截图路径可能是「本子记录」或某个平台子记录，取第一个存在的 */
+    getFailScreenshot(row) {
+      if (!row) return "";
+      if (row.failScreenshot) return String(row.failScreenshot);
+      const hit = (row.showAlltype || row.details || []).find(
+        (item) => item && item.failScreenshot
+      );
+      return hit ? String(hit.failScreenshot) : "";
+    },
+    failScreenshotName(filePath) {
+      const segments = String(filePath || "").split(/[\\/]/);
+      return segments[segments.length - 1] || "";
+    },
+    async openFailScreenshot(row, sub) {
+      const filePath = this.getFailScreenshot(sub || row);
+      if (!filePath) return;
+      this.screenshotLoading = true;
+      this.screenshotDialogVisible = true;
+      this.screenshotPath = filePath;
+      this.screenshotDataUrl = "";
+      this.screenshotError = "";
+      try {
+        const result = await ipcRenderer.invoke(
+          "publish:readFailScreenshot",
+          filePath
+        );
+        if (result && result.ok) {
+          this.screenshotDataUrl = result.dataUrl;
+        } else {
+          this.screenshotError =
+            (result && result.message) || "读取失败截图失败";
+        }
+      } catch (e) {
+        this.screenshotError = (e && e.message) || "读取失败截图失败";
+      } finally {
+        this.screenshotLoading = false;
+      }
+    },
+    async openFailScreenshotExternally() {
+      if (!this.screenshotPath) return;
+      try {
+        const ok = await ipcRenderer.invoke(
+          "publish:openFailScreenshot",
+          this.screenshotPath
+        );
+        if (!ok) this.$message.warning("截图文件不存在或已被自动清理");
+      } catch (e) {
+        this.$message.error("打开截图失败：" + ((e && e.message) || e));
+      }
     },
     publishStatusType(status) {
       if (status === "success") return "success";
@@ -635,6 +759,8 @@ export default {
       // 发布成功后平台会自动跳成功页；5 秒后地址没变说明疑似没发出去，
       // 主进程用 publishAbnormal 标记，这里单独记为「发布异常」而不是成功。
       const abnormal = success && donePayload.publishAbnormal === true;
+      // 主进程在失败/异常瞬间截了发布页的图，这里存进记录，之后可以直接回看
+      const failScreenshot = this.pickFailScreenshot(donePayload, row);
       if (abnormal) {
         await dataRequest({
           type: "update",
@@ -645,6 +771,7 @@ export default {
             publishAbnormalCount:
               this.normalizeCount(row.publishAbnormalCount) + 1,
             publishStatus: "abnormal",
+            ...(failScreenshot ? { failScreenshot } : {}),
             lastPublishMessage:
               donePayload.message ||
               "发布异常：点击发布后 5 秒页面地址未变化，请到平台确认",
@@ -680,6 +807,8 @@ export default {
               ? "draft"
               : "success"
             : "failed",
+          // 成功/存草稿时清掉旧截图，避免把上一次失败的画面留在成功记录上
+          failScreenshot: success ? "" : failScreenshot,
           lastPublishMessage:
             donePayload.message ||
             (success
@@ -976,6 +1105,43 @@ export default {
 
 .progress-count.fail {
   cursor: default;
+}
+
+/* 有失败截图的记录：次数可点，提示用户能回看当时的页面 */
+.progress-count.fail-clickable {
+  cursor: pointer;
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
+}
+
+.progress-count.fail-clickable:hover {
+  color: #f56c6c;
+}
+
+.shot-body {
+  min-height: 200px;
+  max-height: 68vh;
+  overflow: auto;
+  text-align: center;
+}
+
+.shot-path {
+  margin-bottom: 8px;
+  font-size: 12px;
+  color: #909399;
+  word-break: break-all;
+}
+
+.shot-img {
+  max-width: 100%;
+  border: 1px solid $borderColor;
+  border-radius: 4px;
+}
+
+.shot-empty {
+  padding: 40px 0;
+  color: #909399;
+  font-size: 13px;
 }
 
 .pt-name {

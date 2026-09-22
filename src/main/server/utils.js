@@ -196,6 +196,8 @@ function changeData({ item, fileName, type }) {
             publishAttemptCount: attemptCount,
             republishCount: Math.max(0, attemptCount - 1),
             publishStatus: "publishing",
+            // 重新发布已开始，清掉上一轮的失败截图，避免回看到旧画面
+            failScreenshot: "",
             lastPublishMessage: "重新发布中",
             lastPublishAt: Date.now(),
           };

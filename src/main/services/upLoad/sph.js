@@ -12,7 +12,11 @@ import {
   pollPageUntil,
 } from "./uploadTimeouts.js";
 import { buildPlatformVideoText } from "../../../shared/videoMetadata.js";
-import { readPageUrl, replyPublishOutcome } from "./publishOutcome.js";
+import {
+  readPageUrl,
+  replyPublishFailure,
+  replyPublishOutcome,
+} from "./publishOutcome.js";
 
 const SEL_ORIGINAL_CHECKBOX =
   "wujie-app.wujie_iframe >>> .declare-original-checkbox .ant-checkbox-wrapper";
@@ -315,14 +319,17 @@ export default async function (page, data, window, event, onFinish) {
     const detail =
       (err && err.message) || (typeof err === "string" ? err : String(err));
     console.error("❌ 视频号发布失败:", err);
-    event.reply("puppeteerFile-done", {
-      ...data,
-      status: false,
+    // 失败瞬间截图留证（登录过期 / 风控弹窗 / 元素改版都能一眼看出）
+    await replyPublishFailure({
+      page,
+      data,
+      window,
+      event,
       message:
         detail && detail.length > 400
           ? `${detail.slice(0, 400)}…`
           : detail || "上传失败",
+      closeWindow: true,
     });
-    maybeClosePublishWindow(data, window);
   }
 }

@@ -2,6 +2,7 @@ import fs from "fs";
 import path from "path";
 import { clipboard } from "electron";
 import maybeClosePublishWindow from "./closeWindow.js";
+import { replyPublishFailure } from "./publishOutcome.js";
 import { WAIT_SELECTOR_APPEAR_MS } from "./uploadTimeouts.js";
 
 const TITLE_SELECTOR = ".header .title-input";
@@ -322,11 +323,12 @@ export default async function (page, data, window, event) {
   } catch (error) {
     const detail = getErrorMessage(error);
     console.error(`掘金文章发布失败，阶段：${publishStage}`, error);
-    event.reply("puppeteerFile-done", {
-      ...data,
-      status: false,
+    await replyPublishFailure({
+      page,
+      data,
+      window,
+      event,
       message: `文章发布失败：${publishStage} - ${detail}`,
     });
-    maybeClosePublishWindow(data, window);
   }
 }

@@ -1,5 +1,9 @@
 import path from "path";
-import { readPageUrl, replyPublishOutcome } from "./publishOutcome.js";
+import {
+  readPageUrl,
+  replyPublishFailure,
+  replyPublishOutcome,
+} from "./publishOutcome.js";
 import {
   isCreativeStatementNone,
   resolveKsCreativeStatementLabel,
@@ -299,9 +303,12 @@ export default async function (page, data, window, event) {
       successMessage: isDraftMode ? "保存草稿成功" : "上传成功",
     });
   } catch (e) {
-    event.reply("puppeteerFile-done", {
-      ...data,
-      status: false,
+    // 失败瞬间截图留证（登录过期 / 风控弹窗 / 元素改版都能一眼看出）
+    await replyPublishFailure({
+      page,
+      data,
+      window,
+      event,
       message: "上传失败",
     });
     console.error("❌ 发布失败", e);

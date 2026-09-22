@@ -1,5 +1,9 @@
 import path from "path";
-import { readPageUrl, replyPublishOutcome } from "./publishOutcome.js";
+import {
+  readPageUrl,
+  replyPublishFailure,
+  replyPublishOutcome,
+} from "./publishOutcome.js";
 import { resolveBjhCreativeStatementLabel } from "../../../shared/creativeStatement.js";
 import {
   WAIT_SELECTOR_APPEAR_MS,
@@ -609,10 +613,13 @@ export default async function (page, data, window, event) {
     });
   } catch (err) {
     const failMessage = err?.message || "上传失败";
-    event.reply("puppeteerFile-done", {
-      ...data,
-      status: false,
+    await replyPublishFailure({
+      page,
+      data,
+      window,
+      event,
       message: failMessage,
+      closeWindow: false,
     });
     console.error("点击提交按钮失败:", err);
   }

@@ -206,11 +206,15 @@ function finishScheduledRecord(record, payload) {
   }
   const ok = payload && payload.status === true;
   const abnormal = ok && payload.publishAbnormal === true;
+  // 失败/异常时主进程已在发布页截了图，落库后视频管理里可点开回看
+  const failScreenshot =
+    (payload && payload.failScreenshot) || record.failScreenshot;
   updateRecord(record, {
     publishStatus: abnormal ? "abnormal" : ok ? "success" : "failed",
     publishSuccessCount: ok && !abnormal ? 1 : 0,
     publishFailCount: ok ? 0 : 1,
     publishAbnormalCount: abnormal ? 1 : 0,
+    ...(ok && !abnormal ? {} : { failScreenshot }),
     lastPublishMessage:
       (payload && payload.message) || (ok ? "发布成功" : "发布失败"),
     lastPublishAt: Date.now(),

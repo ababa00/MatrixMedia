@@ -390,6 +390,28 @@ export default {
       }
     });
 
+    // 发布失败截图：读取为 data URL 展示，或直接打到系统看图程序里打开。
+    // 打包后页面是 file://，<img src="C:\..."> 在 Windows 上有盘符/中文转义坑，
+    // 所以统一由主进程读文件转 base64。
+    ipcMain.handle("publish:readFailScreenshot", async (_event, filePath) => {
+      const { readFailScreenshotDataUrl } = await import(
+        "./upLoad/failureScreenshot.js"
+      );
+      return readFailScreenshotDataUrl(filePath);
+    });
+
+    ipcMain.handle("publish:openFailScreenshot", async (_event, filePath) => {
+      const target = String(filePath || "");
+      if (!target || !fs.existsSync(target)) return false;
+      // openPath 用系统默认看图程序打开，方便用户另存或附到反馈里
+      const error = await shell.openPath(target);
+      if (error) {
+        console.warn("打开失败截图失败:", error);
+        return false;
+      }
+      return true;
+    });
+
     ipcMain.handle("publish:downloadRemoteFile", async (_event, remoteUrl) => {
       const { resolvePublishFile } = await import("./resolvePublishFile.js");
       const resolved = await resolvePublishFile(remoteUrl);

@@ -1,4 +1,5 @@
 import maybeClosePublishWindow from "./closeWindow.js";
+import { capturePublishFailureScreenshot } from "./failureScreenshot.js";
 
 /** 点击发布后等待页面跳转的时长：平台发布成功会自动跳到成功页/列表页 */
 export const PUBLISH_NAVIGATE_WAIT_MS = 5000;
@@ -82,6 +83,9 @@ export async function replyPublishOutcome({
     payload.publishAbnormal = true;
     payload.outcome = "publish_abnormal";
     payload.needsAttention = true;
+    // 疑似没发出去时页面还停在发布页（通常是平台校验提示 / 风控弹窗），先截图再关窗
+    const shot = await capturePublishFailureScreenshot(page, data);
+    if (shot) payload.failScreenshot = shot;
     console.warn(
       `[publish] ${data.pt} ${PUBLISH_ABNORMAL_MESSAGE}（地址：${urlAfter}）`
     );
@@ -93,4 +97,43 @@ export async function replyPublishOutcome({
     console.error("发布回执发送失败:", e && e.message ? e.message : e);
   }
   maybeClosePublishWindow(closeWindowData || data, window);
+}
+
+/**
+ * 平台 handler 的上传失败回执：先在失败画面上截图，再发 status:false。
+ *
+ * 各平台 catch 分支原本各自 event.reply("puppeteerFile-done", {...})，
+ * 这里统一收口，避免每个平台再复制一遍截图逻辑。
+ *
+ * @param {object} options
+ * @param {import("puppeteer-core").Page} options.page
+ * @param {object} options.data
+ * @param {import("electron").BrowserWindow} options.window
+ * @param {{ reply: Function }} options.event
+ * @param {string} options.message 失败原因
+ * @param {object} [options.extraPayload]
+ * @param {boolean} [options.closeWindow] 是否关闭发布窗口，默认保持各平台原行为（关闭）
+ */
+export async function replyPublishFailure({
+  page,
+  data,
+  window,
+  event,
+  message,
+  extraPayload = {},
+  closeWindow = true,
+}) {
+  const shot = await capturePublishFailureScreenshot(page, data);
+  try {
+    event.reply("puppeteerFile-done", {
+      ...data,
+      ...extraPayload,
+      status: false,
+      message,
+      ...(shot ? { failScreenshot: shot } : {}),
+    });
+  } catch (e) {
+    console.error("发布失败回执发送失败:", e && e.message ? e.message : e);
+  }
+  if (closeWindow) maybeClosePublishWindow(data, window);
 }
