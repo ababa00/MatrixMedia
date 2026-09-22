@@ -197,11 +197,15 @@ function buildLocal() {
 
   // 单次 electron-builder 调用，覆盖所有平台
   // linux 本地只打 AppImage + tar.gz（deb/rpm 需要 fpm/Linux，交给 CI）
+  // ⚠️ 架构必须写成「目标:架构」（nsis:x64）。--x64/--arm64 是 electron-builder 的
+  // 全局开关，会绑到本次调用里的所有平台上：早期写法 --win --x64 ... --arm64 会让
+  // Windows 同时出 x64 + arm64，NSIS 还会把两者合并成一个 138MB 的无架构后缀通用
+  // 安装包（超 Gitee 100MB 上限被跳过），Linux 也会多出 arm64 产物。
   const flags = [];
-  if (PLATFORMS.includes("win")) flags.push("--win", "--x64");
-  if (PLATFORMS.includes("mac")) flags.push("--mac", "--x64", "--arm64");
+  if (PLATFORMS.includes("win")) flags.push("--win", "nsis:x64");
+  if (PLATFORMS.includes("mac")) flags.push("--mac", "dmg:x64", "dmg:arm64");
   if (PLATFORMS.includes("linux"))
-    flags.push("--linux", "AppImage", "tar.gz", "--x64");
+    flags.push("--linux", "AppImage:x64", "tar.gz:x64");
 
   const env = {
     ...process.env,
