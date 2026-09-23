@@ -50,7 +50,12 @@ assert.strictEqual(platformSupportsVideoLink("视频号"), true);
 assert.strictEqual(platformSupportsVideoLink("抖音"), false);
 assert.deepStrictEqual(
   getSupportedVideoLinkTypes("视频号").map((item) => item.type),
-  [VIDEO_LINK_TYPES.NONE, VIDEO_LINK_TYPES.PRODUCT]
+  [
+    VIDEO_LINK_TYPES.NONE,
+    VIDEO_LINK_TYPES.PRODUCT,
+    VIDEO_LINK_TYPES.MINI_DRAMA,
+    VIDEO_LINK_TYPES.SPH_SERIES,
+  ]
 );
 assert.ok(
   getDisplayableVideoLinkTypes("视频号").length >
@@ -75,10 +80,17 @@ assert.strictEqual(
     .automationSupported,
   false
 );
+// 小程序短剧已开放自动化，细节由 test-sph-video-drama.js 覆盖
 assert.strictEqual(
   getVideoLinkTypeCapability("视频号", VIDEO_LINK_TYPES.MINI_DRAMA)
     .automationSupported,
-  false
+  true
+);
+// 视频号剧集已开放自动化，细节由 test-sph-video-series.js 覆盖
+assert.strictEqual(
+  getVideoLinkTypeCapability("视频号", VIDEO_LINK_TYPES.SPH_SERIES)
+    .automationSupported,
+  true
 );
 assert.strictEqual(getVideoLinkTypeCapability("视频号", "member_zone"), null);
 assert.deepStrictEqual(

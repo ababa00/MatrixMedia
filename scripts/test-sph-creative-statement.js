@@ -47,7 +47,12 @@ assert.ok(!sphOptions.includes(CREATIVE_STATEMENT_VALUES.SELF_MADE_NO_REPOST));
 
 assert.deepStrictEqual(
   getSupportedVideoLinkTypes("视频号").map((item) => item.type),
-  [VIDEO_LINK_TYPES.NONE, VIDEO_LINK_TYPES.PRODUCT]
+  [
+    VIDEO_LINK_TYPES.NONE,
+    VIDEO_LINK_TYPES.PRODUCT,
+    VIDEO_LINK_TYPES.MINI_DRAMA,
+    VIDEO_LINK_TYPES.SPH_SERIES,
+  ]
 );
 assert.ok(
   getDisplayableVideoLinkTypes("视频号").some(

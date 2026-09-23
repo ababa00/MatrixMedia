@@ -417,9 +417,19 @@ export default {
           desc: "视频号商品上架编号（快捷字段）",
         },
         {
+          field: "sphDramaId",
+          required: "否",
+          desc: "视频号小程序短剧挂载（快捷字段，值为短剧名称）",
+        },
+        {
+          field: "sphSeriesId",
+          required: "否",
+          desc: "视频号剧集挂载（快捷字段，值为剧集名称）",
+        },
+        {
           field: "platformOptions",
           required: "否",
-          desc: "平台专属参数；视频号商品也可用 platformOptions.sph.link",
+          desc: "平台专属参数；视频号商品/短剧也可用 platformOptions.sph.link",
         },
       ],
       mcpTools: [

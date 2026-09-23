@@ -93,8 +93,10 @@ cd mcp && npm install && npm run build
 | `show`         | 否   | 是否显示底层浏览器窗口                                        |
 | `draft`             | 否   | `true` 时保存到草稿箱，不直接发布                             |
 | `creativeStatement` | 否   | 创作声明 / 视频号视频标注                                     |
-| `sphProductId`      | 否   | 视频号商品上架编号（推荐）                                    |
-| `sphLink`           | 否   | 视频号链接对象；与 `sphProductId` 同时传时优先 `sphProductId` |
+| `sphProductId`      | 否   | 视频号商品上架编号（推荐） |
+| `sphDramaId`        | 否   | 视频号小程序短剧挂载（**短剧名称**，如 `泳陷错恋`）                          |
+| `sphSeriesId`       | 否   | 视频号剧集挂载（**剧集名称**，视频号原生剧集）                          |
+| `sphLink`           | 否   | 视频号链接对象（`type` 支持 `none` / `product` / `mini_drama` / `sph_series`）；与 `sphProductId` / `sphDramaId` / `sphSeriesId` 同时传时优先快捷字段 |
 
 视频号商品上架草稿调用参数示例：
 
@@ -112,7 +114,33 @@ cd mcp && npm install && npm run build
 }
 ```
 
-当 `platform` 不是 `sph` 时，`sphProductId` / `sphLink` 会被忽略。若商品添加失败但视频已成功转存草稿，Tool 返回 `status: needs_attention`，不会误报为发布成功。
+视频号挂载小程序短剧（值填**短剧名称**，取自发布页「选择需要关联的短剧」列表）：
+
+```json
+{
+  "platform": "sph",
+  "file": "D:\\videos\\a.mp4",
+  "title": "短剧第一集",
+  "phone": "13800138000",
+  "draft": true,
+  "sphDramaId": "泳陷错恋"
+}
+```
+
+视频号挂载剧集（值填**剧集名称**；与小程序短剧互斥，一次只挂一种）：
+
+```json
+{
+  "platform": "sph",
+  "file": "D:\\videos\\a.mp4",
+  "title": "短剧第一集",
+  "phone": "13800138000",
+  "draft": true,
+  "sphSeriesId": "儿媳给我办寿宴"
+}
+```
+
+当 `platform` 不是 `sph` 时，`sphProductId` / `sphDramaId` / `sphSeriesId` / `sphLink` 会被忽略。若商品、短剧或剧集添加失败但视频已成功转存草稿，Tool 返回 `status: needs_attention`，不会误报为发布成功。
 
 ### publish_article
 

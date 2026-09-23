@@ -94,6 +94,14 @@ export function parsePublishArgs(subArgv) {
       // 商品上架快捷参数：等价于 --sph-link-type product --sph-link-value <id>
       out.sphLinkType = VIDEO_LINK_TYPES.PRODUCT;
       out.sphLinkValue = args[++i];
+    } else if (a === "--sph-drama-id") {
+      // 小程序短剧快捷参数：等价于 --sph-link-type mini_drama --sph-link-value <短剧名称>
+      out.sphLinkType = VIDEO_LINK_TYPES.MINI_DRAMA;
+      out.sphLinkValue = args[++i];
+    } else if (a === "--sph-series-id") {
+      // 视频号剧集快捷参数：等价于 --sph-link-type sph_series --sph-link-value <剧集名称>
+      out.sphLinkType = VIDEO_LINK_TYPES.SPH_SERIES;
+      out.sphLinkValue = args[++i];
     }
   }
 
@@ -129,13 +137,23 @@ export function parsePublishArgs(subArgv) {
         无: VIDEO_LINK_TYPES.NONE,
         product: VIDEO_LINK_TYPES.PRODUCT,
         商品: VIDEO_LINK_TYPES.PRODUCT,
+        mini_drama: VIDEO_LINK_TYPES.MINI_DRAMA,
+        drama: VIDEO_LINK_TYPES.MINI_DRAMA,
+        短剧: VIDEO_LINK_TYPES.MINI_DRAMA,
+        小程序短剧: VIDEO_LINK_TYPES.MINI_DRAMA,
+        微短剧: VIDEO_LINK_TYPES.MINI_DRAMA,
+        sph_series: VIDEO_LINK_TYPES.SPH_SERIES,
+        series: VIDEO_LINK_TYPES.SPH_SERIES,
+        剧集: VIDEO_LINK_TYPES.SPH_SERIES,
+        视频号剧集: VIDEO_LINK_TYPES.SPH_SERIES,
       };
       const linkType =
         typeAliases[String(out.sphLinkType).trim().toLowerCase()];
       if (!linkType) {
         return {
           ok: false,
-          error: "--sph-link-type 当前仅支持 none 或 product",
+          error:
+            "--sph-link-type 当前仅支持 none、product、mini_drama 或 sph_series",
         };
       }
       if (linkType === VIDEO_LINK_TYPES.PRODUCT && !hasValue) {
@@ -145,10 +163,24 @@ export function parsePublishArgs(subArgv) {
             "视频号商品上架必须提供 --sph-product-id 或 --sph-link-value <商品编号>",
         };
       }
+      if (linkType === VIDEO_LINK_TYPES.MINI_DRAMA && !hasValue) {
+        return {
+          ok: false,
+          error:
+            "视频号短剧挂载必须提供 --sph-drama-id 或 --sph-link-value <短剧名称>",
+        };
+      }
+      if (linkType === VIDEO_LINK_TYPES.SPH_SERIES && !hasValue) {
+        return {
+          ok: false,
+          error:
+            "视频号剧集挂载必须提供 --sph-series-id 或 --sph-link-value <剧集名称>",
+        };
+      }
       if (linkType === VIDEO_LINK_TYPES.NONE && hasValue) {
         return {
           ok: false,
-          error: "--sph-link-type none 不应同时提供商品编号",
+          error: "--sph-link-type none 不应同时提供编号",
         };
       }
       const built = buildVideoLinkOption("视频号", linkType, out.sphLinkValue);
@@ -309,8 +341,22 @@ export function publishBodyToArgv(body) {
     "sph-product-id",
     "productId",
   ]);
+  const sphDramaId = pickBodyValue(body, [
+    "sphDramaId",
+    "sph-drama-id",
+    "dramaId",
+  ]);
+  const sphSeriesId = pickBodyValue(body, [
+    "sphSeriesId",
+    "sph-series-id",
+    "seriesId",
+  ]);
   if (sphProductId != null && String(sphProductId).trim() !== "") {
     argv.push("--sph-product-id", String(sphProductId).trim());
+  } else if (sphDramaId != null && String(sphDramaId).trim() !== "") {
+    argv.push("--sph-drama-id", String(sphDramaId).trim());
+  } else if (sphSeriesId != null && String(sphSeriesId).trim() !== "") {
+    argv.push("--sph-series-id", String(sphSeriesId).trim());
   } else if (sphLink && typeof sphLink === "object") {
     if (sphLink.type != null && String(sphLink.type).trim() !== "") {
       argv.push("--sph-link-type", String(sphLink.type));
@@ -365,6 +411,12 @@ const SHARED_PUBLISH_BODY_KEYS = [
   "sphProductId",
   "sph-product-id",
   "productId",
+  "sphDramaId",
+  "sph-drama-id",
+  "dramaId",
+  "sphSeriesId",
+  "sph-series-id",
+  "seriesId",
 ];
 
 function extractSharedPublishBody(body) {
@@ -600,8 +652,11 @@ export function publishHelpText() {
       --draft           显式发布到草稿箱（小红书点「暂存离开」）。若账号在 GUI「媒体平台管理」
                             里开启了「默认发布到草稿」，即使不加该参数也会自动走草稿。
       --sph-product-id <id>   视频号商品上架（快捷参数，等价于 product + 商品编号）
-      --sph-link-type <type>  视频号链接类型：none | product；传给其他平台时忽略
-      --sph-link-value <id>   视频号商品编号；可单独传（默认按商品上架）
+      --sph-drama-id <name>   视频号挂载小程序短剧。值为短剧「名称」而非编号（发布页按名称搜索），
+                                如 --sph-drama-id 泳陷错恋；传数字编号会搜不到。
+      --sph-series-id <name>  视频号挂载剧集（视频号原生剧集，区别于小程序短剧）。同样传「名称」而非编号。
+      --sph-link-type <type>  视频号链接类型：none | product | mini_drama | sph_series（也接受 drama / 短剧 / series / 剧集）；传给其他平台时忽略
+      --sph-link-value <v>    视频号链接值：商品编号，或短剧/剧集名称；只传该参数时默认按商品上架
   -h, --help            显示帮助
 
 退出码 (单文件): 0 成功, 1 异常, 2 参数错误, 3 任务失败（上传未成功）, 4 已转存草稿需检查
@@ -617,6 +672,12 @@ export function publishHelpText() {
     --short-title "5公里新手挑战" \\\\
     --tags "跑步 新手 减脂" \\
     --sph-product-id 10000591263144 --draft
+  # 视频号挂载小程序短剧（短剧名称取自视频号发布页「选择需要关联的短剧」列表，如 泳陷错恋；失败会自动转存草稿）：
+  matrixmedia cli publish -p sph --phone 13800138000 -f ./v.mp4 \\\\
+    -t "短剧第一集" --draft --sph-drama-id 泳陷错恋
+  # 视频号挂载剧集（剧集名称取自发布页剧集列表；与小程序短剧互斥，一次只挂一种）：
+  matrixmedia cli publish -p sph --phone 13800138000 -f ./v.mp4 \\\\
+    -t "短剧第一集" --draft --sph-series-id 天作剧场
   # 哔哩哔哩独立标签控件，空格分隔、是否带 # 都可：
   matrixmedia cli publish -p blbl --phone 13800138000 -f ./v.mp4 -t "标题" --tags "游戏 解说 开黑"
   # 一次性定时发布：必须提供实际视频、标题、账号等完整发布参数

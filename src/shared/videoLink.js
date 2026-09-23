@@ -7,12 +7,15 @@ export const VIDEO_LINK_TYPES = {
   PRODUCT: "product",
   MINI_GAME: "mini_game",
   MINI_DRAMA: "mini_drama",
+  SPH_SERIES: "sph_series",
 };
 
 /**
  * 平台链接能力表。
  * platformAvailable 表示平台页面存在该能力；automationSupported 表示工具已完成并验证自动化。
- * 会员专区不进入工具能力表；小游戏与短剧仅预留结构，未验证前不向用户开放。
+ * 会员专区不进入工具能力表；小游戏仍仅预留结构，未验证前不向用户开放。
+ * 小程序短剧 / 视频号剧集已按同款流程实现（见 main/services/upLoad/sphDrama.js 与 sphSeries.js），
+ * 但平台 DOM 存在版本差异，失败时会由 sphLink 兜底转存草稿并返回 needs_attention，不会误报成功。
  */
 const VIDEO_LINK_CAPABILITIES = {
   视频号: {
@@ -70,10 +73,21 @@ const VIDEO_LINK_CAPABILITIES = {
         type: VIDEO_LINK_TYPES.MINI_DRAMA,
         label: "小程序短剧",
         inputKind: "entity_id",
-        placeholder: "输入短剧编号",
+        placeholder: "输入短剧名称，如 泳陷错恋",
         maxLength: 64,
         platformAvailable: true,
-        automationSupported: false,
+        automationSupported: true,
+        selectionMode: "drama_id",
+      },
+      {
+        type: VIDEO_LINK_TYPES.SPH_SERIES,
+        label: "视频号剧集",
+        inputKind: "entity_id",
+        placeholder: "输入剧集名称",
+        maxLength: 64,
+        platformAvailable: true,
+        automationSupported: true,
+        selectionMode: "series_id",
       },
     ],
   },
@@ -131,17 +145,41 @@ export function validateVideoLinkValue(platform, type, value) {
     return { ok: false, value: normalized, error: "当前链接类型尚未开放" };
   }
   if (!normalized) {
-    return {
-      ok: false,
-      value: "",
-      error:
-        resolvedType === VIDEO_LINK_TYPES.PRODUCT
-          ? "请选择或填写商品编号"
-          : "请填写链接内容",
-    };
+    const emptyMessage =
+      resolvedType === VIDEO_LINK_TYPES.PRODUCT
+        ? "请选择或填写商品编号"
+        : resolvedType === VIDEO_LINK_TYPES.MINI_DRAMA
+        ? "请填写短剧名称"
+        : resolvedType === VIDEO_LINK_TYPES.SPH_SERIES
+        ? "请填写剧集名称"
+        : "请填写链接内容";
+    return { ok: false, value: "", error: emptyMessage };
   }
   if (resolvedType === VIDEO_LINK_TYPES.PRODUCT && !/^\d+$/.test(normalized)) {
     return { ok: false, value: normalized, error: "商品编码只能包含数字" };
+  }
+  const isEntityIdType =
+    resolvedType === VIDEO_LINK_TYPES.MINI_DRAMA ||
+    resolvedType === VIDEO_LINK_TYPES.SPH_SERIES;
+  if (isEntityIdType) {
+    const entityHint =
+      resolvedType === VIDEO_LINK_TYPES.MINI_DRAMA ? "短剧" : "剧集";
+    // 名称按「包含匹配」搜索，允许空格（如「My Boss 是首富」）；
+    // 仅拦截会破坏输入/日志的换行与制表符。
+    if (/[\r\n\t]/.test(normalized)) {
+      return {
+        ok: false,
+        value: normalized,
+        error: `${entityHint}名称不能包含换行或制表符`,
+      };
+    }
+    if (normalized.length > 64) {
+      return {
+        ok: false,
+        value: normalized,
+        error: `${entityHint}名称最长 64 个字符`,
+      };
+    }
   }
   return { ok: true, value: normalized };
 }

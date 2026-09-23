@@ -31,14 +31,33 @@ function ensureGetCookieDoneListener() {
   });
 }
 
+/**
+ * 拉取账号数据，失败自动重试。
+ *
+ * 窗口刚启动时内置服务（30088）可能尚未就绪，首次请求会失败；
+ * 不重试会导致读到空列表、整个会话都无法进入媒体平台管理。
+ * 统一走 dataRequest（自动附内置服务令牌），重试只是包在它外面。
+ */
+function fetchAccountsWithRetry(retryLeft = 10, intervalMs = 800) {
+  return dataRequest({
+    type: "get",
+    fileName: "account",
+    pageSize: 9999,
+  }).then((r) => {
+    const ok = r && typeof r === "object" && r.data != null;
+    if (!ok && retryLeft > 0) {
+      return new Promise((resolve) =>
+        setTimeout(resolve, intervalMs)
+      ).then(() => fetchAccountsWithRetry(retryLeft - 1, intervalMs));
+    }
+    return r;
+  });
+}
+
 function addFetchRoute(routes) {
   return new Promise((resolve) => {
     // 统一走 dataRequest：自动附内置服务令牌（打包下无 Origin 也能过守卫）
-    dataRequest({
-      type: "get",
-      fileName: "account",
-      pageSize: 9999,
-    })
+    fetchAccountsWithRetry()
       .then((r) => {
         const endData = {};
         const payload = r && typeof r === "object" ? r : {};
