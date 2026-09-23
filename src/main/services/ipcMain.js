@@ -16,6 +16,7 @@ import { registerSphWindowProductsIpc } from "./sphWindowProducts";
 import { createLaunchInstallerHandler } from "./launchInstaller";
 import { pickReleaseInstaller } from "./pickReleaseInstaller";
 import { applyAccountProxyForTask } from "./proxyConfig";
+import { SERVER_REQUEST_TOKEN } from "../server/requestGuard";
 import {
   closeOtherAccountLoginWindows,
   getAccountLoginWindowByPartition,
@@ -130,8 +131,27 @@ function compareSemver(remoteRaw, localRaw) {
 
 export default {
   async Mainfunc(IsUseSysTitle) {
-    // Always register the check-for-updates handler first
-    ipcMain.handle("check-for-updates", async (event) => {
+    // 内置服务（localhost:30088）的随机令牌，只发放给自家页面：
+    // 打包后主窗口是 file://，dev 模式是 http://localhost:xxxx；
+    // 账号登录窗等加载的外部平台页面一律拒绝，防止令牌外泄。
+    ipcMain.handle("matrix:server-token", (event) => {
+      try {
+        const frameUrl = String(
+          (event.senderFrame && event.senderFrame.url) || ""
+        );
+        if (/^(file:|https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?[\/#?]?)/.test(frameUrl)) {
+          return SERVER_REQUEST_TOKEN;
+        }
+      } catch (_) {
+        /* ignore */
+      }
+      return "";
+    });
+
+    // 检查更新：只做「是否有新版本」的检测并返回版本信息，
+    // 不再自动开始下载 —— 是否下载由用户点击「立即更新」后
+    // 通过 start-update-download 显式触发（非强制更新）。
+    ipcMain.handle("check-for-updates", async (_event) => {
       const lastData = await getLatestRelease();
       if (!lastData) {
         return { hasUpdate: false };
@@ -139,7 +159,6 @@ export default {
       const remoteVer =
         (lastData.tag_name && String(lastData.tag_name).replace(/^v/i, "")) ||
         (lastData.name && String(lastData.name).replace(/^v/i, ""));
-      console.log(lastData, remoteVer, "remoteVer", version);
       const cmp = compareSemver(remoteVer, version);
       const assets = lastData.assets || [];
 
@@ -147,17 +166,40 @@ export default {
         translated: Boolean(electronApp.runningUnderARM64Translation),
       });
       const downloadURL = installer && installer.browser_download_url;
-      console.log(downloadURL, "downloadURL", assets);
-      console.log(cmp, "cmp");
-      if (downloadURL && cmp > 0) {
-        downloadFile.download(
-          BrowserWindow.fromWebContents(event.sender),
-          downloadURL
-        );
-      }
+
       return {
         hasUpdate: Boolean(downloadURL && cmp > 0),
+        currentVersion: version,
+        latestVersion: remoteVer || "",
+        releaseName: lastData.name || lastData.tag_name || "",
+        releaseBody: lastData.body || "",
       };
+    });
+
+    // 用户确认后开始下载安装包。下载地址不信任渲染进程传参，
+    // 由主进程重新解析一次 Release（1 小时缓存），避免被篡改。
+    ipcMain.handle("start-update-download", async (event) => {
+      try {
+        const lastData = await getLatestRelease();
+        if (!lastData) {
+          return { ok: false, message: "未获取到版本信息，请检查网络" };
+        }
+        const installer = pickReleaseInstaller(lastData.assets || [], {
+          translated: Boolean(electronApp.runningUnderARM64Translation),
+        });
+        const downloadURL = installer && installer.browser_download_url;
+        if (!downloadURL) {
+          return { ok: false, message: "未找到适合当前平台的安装包" };
+        }
+        const win = BrowserWindow.fromWebContents(event.sender);
+        if (!win) {
+          return { ok: false, message: "主窗口已关闭，无法下载" };
+        }
+        downloadFile.download(win, downloadURL);
+        return { ok: true };
+      } catch (e) {
+        return { ok: false, message: (e && e.message) || "启动下载失败" };
+      }
     });
 
     // 先启动安装包再退出应用，避免安装器处理正在运行的主程序时失败。

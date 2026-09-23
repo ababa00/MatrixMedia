@@ -5,6 +5,7 @@ import router from "@/router";
 import VueRouter from "vue-router";
 
 import { constantRouterMap } from "@/router";
+import dataRequest from "@/utils/dataRequest";
 import {
   setAccountLoginFlag,
   clearAccountLoginFlag,
@@ -32,23 +33,12 @@ function ensureGetCookieDoneListener() {
 
 function addFetchRoute(routes) {
   return new Promise((resolve) => {
-    fetch("http://localhost:30088/changeData", {
-      method: "POST",
-      headers: {
-        Accept: "application/json",
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        type: "get",
-        fileName: "account",
-        pageSize: 9999,
-      }),
+    // 统一走 dataRequest：自动附内置服务令牌（打包下无 Origin 也能过守卫）
+    dataRequest({
+      type: "get",
+      fileName: "account",
+      pageSize: 9999,
     })
-      .then((r) => r.json())
-      .catch((err) => {
-        console.error("[permission] 拉取账号路由失败:", err);
-        return {};
-      })
       .then((r) => {
         const endData = {};
         const payload = r && typeof r === "object" ? r : {};

@@ -1,5 +1,6 @@
 var express = require("express");
 const { changeData } = require("../utils");
+const { isTrustedLocalRequest } = require("../requestGuard");
 
 var router = express.Router();
 
@@ -52,11 +53,10 @@ router.get("/creative-statements", async function (req, res) {
 });
 
 router.post("/changeData", function (req, res) {
-  const origin = req.headers.origin || req.headers.referer || "";
-  // Require a matching Origin/Referer for every request; previously a
-  // missing header skipped validation entirely, letting any local process
-  // (curl, scripts, etc. that omit these headers) bypass the check.
-  if (!/^(file:|http:\/\/localhost|http:\/\/127\.0\.0\.1)/.test(origin)) {
+  // 信任条件见 requestGuard：命中 Origin 白名单，或携带本次启动的
+  // 随机令牌（打包后 file:// 页面不发送 Origin，必须靠令牌通过）。
+  // 无 Origin 也无令牌的本地脚本 / 外部网站请求一律 403。
+  if (!isTrustedLocalRequest(req)) {
     return res.status(403).json({ success: false, message: "Forbidden" });
   }
   res.json(changeData({ ...req.body }));

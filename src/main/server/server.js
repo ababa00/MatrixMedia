@@ -6,8 +6,9 @@ var app = express();
  app.all('*',function(req,res,next) {
   res.header("Access-Control-Allow-Origin","*");
   res.header('Access-Control-Allow-Methods','PUT,GET,POST,DELETE,OPTIONS');
-  res.header("Access-Control-Allow-Headers","X-Requested-With");
-  res.header('Access-Control-Allow-Headers','Content-Type');
+  // 注意：重复调用 res.header 同名头是覆盖而非追加，
+  // 自定义令牌头必须和 Content-Type 写在同一次调用里
+  res.header("Access-Control-Allow-Headers","Content-Type, X-Matrix-Token");
   next();
 });
 app.use(express.json());
