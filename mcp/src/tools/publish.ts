@@ -93,20 +93,31 @@ export const publishVideoTool: Tool = {
         description:
           "Shipinhao product ID for attaching a shop product. Ignored for other platforms. Prefer this over sphLink for product-only use.",
       },
+      sphDramaId: {
+        type: "string",
+        description:
+          "Shipinhao mini-drama NAME (not an ID) for attaching a mini-drama (小程序短剧), e.g. 泳陷错恋. The publish page searches by name. Ignored for other platforms. Prefer this over sphLink for drama-only use.",
+      },
+      sphSeriesId: {
+        type: "string",
+        description:
+          "Shipinhao drama-series NAME (not an ID) for attaching a native 视频号剧集 (distinct from mini-drama 小程序短剧). The publish page searches by name. Ignored for other platforms. Prefer this over sphLink for series-only use.",
+      },
       sphLink: {
         type: "object",
         description:
-          "Optional Shipinhao-only link configuration. Ignored for other platforms. If sphProductId is also set, sphProductId wins.",
+          "Optional Shipinhao-only link configuration. Ignored for other platforms. If sphProductId, sphDramaId or sphSeriesId is also set, the shortcut field wins.",
         properties: {
           type: {
             type: "string",
-            enum: ["none", "product"],
+            enum: ["none", "product", "mini_drama", "sph_series"],
             description:
-              "Shipinhao link type. product selects a product by ID.",
+              "Shipinhao link type. product selects a shop product by ID; mini_drama attaches a mini-drama by name; sph_series attaches a native drama series by name.",
           },
           value: {
             type: "string",
-            description: "Shipinhao product ID. Required when type=product.",
+            description:
+              "Shipinhao product ID, or mini-drama / drama-series NAME. Required when type=product, type=mini_drama or type=sph_series.",
           },
         },
         required: ["type"],
@@ -136,6 +147,10 @@ export async function handlePublishVideo(
     args.creativeStatement == null ? "" : String(args.creativeStatement).trim();
   const sphProductId =
     args.sphProductId == null ? "" : String(args.sphProductId).trim();
+  const sphDramaId =
+    args.sphDramaId == null ? "" : String(args.sphDramaId).trim();
+  const sphSeriesId =
+    args.sphSeriesId == null ? "" : String(args.sphSeriesId).trim();
   const sphLink = args.sphLink;
 
   if (typeof phone !== "string" || phone.length === 0) {
@@ -153,17 +168,38 @@ export async function handlePublishVideo(
   if (String(platform) === "sph") {
     if (sphProductId) {
       sphLinkArgs = ["--sph-product-id", sphProductId];
+    } else if (sphDramaId) {
+      sphLinkArgs = ["--sph-drama-id", sphDramaId];
+    } else if (sphSeriesId) {
+      sphLinkArgs = ["--sph-series-id", sphSeriesId];
     } else if (sphLink && typeof sphLink === "object") {
       const link = sphLink as Record<string, unknown>;
       const type = String(link.type || "");
       const value = link.value == null ? "" : String(link.value).trim();
-      if (type === "product" && !value) {
-        throw new Error("sphLink.value is required when sphLink.type=product");
-      }
-      if (type === "product" || value) {
-        sphLinkArgs = value
-          ? ["--sph-product-id", value]
-          : ["--sph-link-type", type];
+      if (type === "product") {
+        if (!value) {
+          throw new Error(
+            "sphLink.value is required when sphLink.type=product"
+          );
+        }
+        sphLinkArgs = ["--sph-product-id", value];
+      } else if (type === "mini_drama" || type === "drama") {
+        if (!value) {
+          throw new Error(
+            "sphLink.value is required when sphLink.type=mini_drama"
+          );
+        }
+        sphLinkArgs = ["--sph-drama-id", value];
+      } else if (type === "sph_series" || type === "series") {
+        if (!value) {
+          throw new Error(
+            "sphLink.value is required when sphLink.type=sph_series"
+          );
+        }
+        sphLinkArgs = ["--sph-series-id", value];
+      } else if (value) {
+        // 兼容旧行为：未指定类型但给了编号时按商品处理
+        sphLinkArgs = ["--sph-product-id", value];
       } else if (type) {
         sphLinkArgs = ["--sph-link-type", type];
       }

@@ -106,9 +106,11 @@ electron . cli publish -p dy --phone 13800138000 -f /path/to/video.mp4 -t "标�
 | `--show`                  | 当前 CLI 会忽略，仍后台运行                                                |
 | `--no-close-window`       | CLI 下无效，仅与 GUI 显示窗口场景有关                                      |
 | `--draft`                 | 保存到平台草稿箱，不直接发布                                               |
-| `--sph-product-id`        | 视频号商品上架快捷参数（商品编号）；其他平台忽略                           |
-| `--sph-link-type`         | 视频号链接类型，当前支持 `none` / `product`；其他平台忽略                  |
-| `--sph-link-value`        | 视频号商品编号；可单独传（默认按商品上架）                                 |
+| `--sph-product-id`        | 视频号商品上架快捷参数（商品编号）；其他平台忽略 |
+| `--sph-drama-id` | 视频号小程序短剧挂载快捷参数（**短剧名称**，如 `泳陷错恋`）；其他平台忽略                           |
+| `--sph-series-id` | 视频号剧集挂载快捷参数（**剧集名称**，视频号原生剧集）；其他平台忽略                           |
+| `--sph-link-type`         | 视频号链接类型，支持 `none` / `product` / `mini_drama` / `sph_series`（也接受 `短剧` / `drama` / `剧集` / `series` 等别名）；其他平台忽略                  |
+| `--sph-link-value`        | 视频号链接值：商品编号，或短剧 / 剧集**名称**；只传该参数时默认按商品上架                                 |
 
 完整说明请执行：
 
@@ -133,6 +135,34 @@ electron . cli publish -p sph --phone 13800138000 -f /path/to/video.mp4 \
   -t "视频标题" --description "视频简介" --short-title "视频号短标题" --draft \
   --sph-product-id 10000591263144
 ```
+
+视频号挂载小程序短剧（值填**短剧名称**，取自发布页「选择需要关联的短剧」列表）：
+
+```bash
+electron . cli publish -p sph --phone 13800138000 -f /path/to/video.mp4 \
+  -t "短剧第一集" --draft --sph-drama-id 泳陷错恋
+```
+
+视频号挂载剧集（值填**剧集名称**；与小程序短剧互斥，一次只挂一种）：
+
+```bash
+electron . cli publish -p sph --phone 13800138000 -f /path/to/video.mp4 \
+  -t "短剧第一集" --draft --sph-series-id 儿媳给我办寿宴
+```
+
+> 参数名保留 `-id` 后缀以兼容既有脚本，**实际取值是名称而不是编号**。
+> 传数字编号会搜索不到目标，命令不会报错但会走「转存草稿」兜底。
+> 例如下面这条是**错误用法**（`1234567890` 不是名称）：
+>
+> ```bash
+> # ✗ 错误：值为编号，搜不到
+> electron . cli publish -p sph --phone 13800138000 -f /path/to/video.mp4 \
+>   -t "短剧第一集" --draft --sph-drama-id 1234567890
+> ```
+>
+> 正确做法是填发布页「选择需要关联的短剧」列表里看到的名称。
+
+短剧 / 剧集添加失败时不会直接发布：主进程会等视频处理完成后自动转存草稿，返回 `status: needs_attention`、退出码 `4`，需要人工到视频号后台确认。排查与文案候选调整见仓库内 `docs/sph-links.md`。
 
 视频号链接参数属于视频号专属能力。即使误传给抖音、B 站等其他平台，也会被忽略，不会阻断任务。
 

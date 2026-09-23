@@ -132,8 +132,10 @@
 | `tags`               | 否     | 标签，支持空格 / 逗号分隔；HTTP 会按 GUI 批量发布习惯拆分后再按平台补 `#` 或去 `#`                                                       |
 | `publishAt`          | 否     | 一次性定时发布，格式 `YYYY-MM-DD HH:mm:ss`（多平台时需全部一致）                                                                         |
 | `draft`              | 否     | `true` 时保存到平台草稿箱，不直接发布                                                                                                    |
-| `sphProductId`       | 否     | 视频号商品上架快捷字段（商品编号）；仅视频号生效，等价于 `platformOptions.sph.link.type=product`                                         |
-| `sphLink`            | 否     | 视频号链接对象，如 `{ "type": "product", "value": "商品编号" }`；与 `sphProductId` 同时传时优先 `sphProductId`                           |
+| `sphProductId`       | 否     | 视频号商品上架快捷字段（商品编号）；仅视频号生效，等价于 `platformOptions.sph.link.type=product` |
+| `sphDramaId` | 否 | 视频号小程序短剧挂载快捷字段（**短剧名称**，如 `泳陷错恋`）；仅视频号生效，等价于 `platformOptions.sph.link.type=mini_drama`                                         |
+| `sphSeriesId` | 否 | 视频号剧集挂载快捷字段（**剧集名称**，视频号原生剧集）；仅视频号生效，等价于 `platformOptions.sph.link.type=sph_series`                                         |
+| `sphLink`            | 否     | 视频号链接对象，如 `{ "type": "product", "value": "商品编号" }`、`{ "type": "mini_drama", "value": "短剧名称" }` 或 `{ "type": "sph_series", "value": "剧集名称" }`；与三个快捷字段同时传时优先快捷字段                           |
 | `platformOptions`    | 否     | 平台专属参数容器；视频号商品也可用 `platformOptions.sph.link`，不会应用到其他平台                                                        |
 | `creativeStatement`  | 否     | 全局创作声明，等同 GUI「批量设置创作声明」；支持 value、中文 label 或平台页面原文案（如 `内容由AI生成`）                                 |
 | `creativeStatements` | 否     | 按平台覆盖声明，key 用 code 或中文名，如 `{ "dy": "ai_generated", "blbl": "fiction" }`；某平台不支持所选值时回退 `none`                  |
@@ -197,7 +199,7 @@ curl -X POST http://127.0.0.1:30088/publish \
   }'
 ```
 
-也可用完整对象：
+也可用完整对象（视频号商品 / 小程序短剧 / 剧集）：
 
 ```json
 {
@@ -207,7 +209,23 @@ curl -X POST http://127.0.0.1:30088/publish \
 }
 ```
 
-`sphProductId` / `sphLink` / `platformOptions.sph` 只会被视频号任务读取。多平台发布时其他平台会忽略它们；不同视频号账号可在各个 `platforms[]` 对象内分别覆盖商品编号。
+```json
+{
+  "platformOptions": {
+    "sph": { "link": { "type": "mini_drama", "value": "泳陷错恋" } }
+  }
+}
+```
+
+```json
+{
+  "platformOptions": {
+    "sph": { "link": { "type": "sph_series", "value": "儿媳给我办寿宴" } }
+  }
+}
+```
+
+`sphProductId` / `sphDramaId` / `sphSeriesId` / `sphLink` / `platformOptions.sph` 只会被视频号任务读取。多平台发布时其他平台会忽略它们；不同视频号账号可在各个 `platforms[]` 对象内分别覆盖商品 / 短剧 / 剧集名称。短剧或剧集添加失败时同样走「转存草稿」兜底：HTTP `200`、`status: needs_attention`、`exitCode: 4`。
 
 远程视频 URL：
 

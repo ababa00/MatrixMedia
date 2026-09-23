@@ -285,39 +285,51 @@
                 />
               </el-select>
               <template v-if="platformVideoLinkNeedsValue(row)">
-                <el-select
-                  :value="getPlatformVideoLinkValue(row.id)"
-                  size="mini"
-                  filterable
-                  clearable
-                  class="attrs-product-select"
-                  placeholder="从橱窗选择商品"
-                  :loading="!!platformProductLoading[row.id]"
-                  @visible-change="
-                    (open) => open && loadPlatformWindowProducts(row)
-                  "
-                  @input="setPlatformVideoLinkValue(row.id, row.pt, $event)"
-                >
-                  <el-option
-                    v-for="item in getPlatformProductOptions(row.id)"
-                    :key="item.productId"
-                    :label="item.title + ' (' + item.productId + ')'"
-                    :value="item.productId"
+                <template v-if="platformVideoLinkIsProduct(row)">
+                  <el-select
+                    :value="getPlatformVideoLinkValue(row.id)"
+                    size="mini"
+                    filterable
+                    clearable
+                    class="attrs-product-select"
+                    placeholder="从橱窗选择商品"
+                    :loading="!!platformProductLoading[row.id]"
+                    @visible-change="
+                      (open) => open && loadPlatformWindowProducts(row)
+                    "
+                    @input="setPlatformVideoLinkValue(row.id, row.pt, $event)"
+                  >
+                    <el-option
+                      v-for="item in getPlatformProductOptions(row.id)"
+                      :key="item.productId"
+                      :label="item.title + ' (' + item.productId + ')'"
+                      :value="item.productId"
+                    />
+                  </el-select>
+                  <el-button
+                    type="text"
+                    size="mini"
+                    :loading="!!platformProductLoading[row.id]"
+                    @click="loadPlatformWindowProducts(row, true)"
+                    >刷新橱窗</el-button
+                  >
+                  <el-input
+                    :value="getPlatformVideoLinkValue(row.id)"
+                    size="mini"
+                    clearable
+                    class="attrs-product-id"
+                    placeholder="或手动输入商品编号"
+                    @input="setPlatformVideoLinkValue(row.id, row.pt, $event)"
                   />
-                </el-select>
-                <el-button
-                  type="text"
-                  size="mini"
-                  :loading="!!platformProductLoading[row.id]"
-                  @click="loadPlatformWindowProducts(row, true)"
-                  >刷新橱窗</el-button
-                >
+                </template>
                 <el-input
+                  v-else
                   :value="getPlatformVideoLinkValue(row.id)"
                   size="mini"
                   clearable
-                  class="attrs-product-id"
-                  placeholder="或手动输入商品编号"
+                  class="attrs-link-value"
+                  :maxlength="platformVideoLinkMaxLength(row)"
+                  :placeholder="platformVideoLinkPlaceholder(row)"
                   @input="setPlatformVideoLinkValue(row.id, row.pt, $event)"
                 />
               </template>
@@ -326,6 +338,10 @@
           </template>
         </el-table-column>
       </el-table>
+
+      <p v-if="attrsHasEntityLink" class="bt2-tip">
+        挂载失败时不会直接发布：视频处理完成后会自动转存草稿并提示「需要处理」，请到视频号后台手动确认。
+      </p>
 
       <div slot="footer" class="dialog-footer">
         <el-button :disabled="publishing" @click="goBackToPlatform"
@@ -637,6 +653,12 @@ export default {
       return this.checkedPlatformNodes.some((node) =>
         platformSupportsVideoLink(node.pt)
       );
+    },
+    attrsHasEntityLink() {
+      return this.checkedPlatformNodes.some((node) => {
+        const type = this.getPlatformVideoLinkType(node.id, node.pt);
+        return type === "mini_drama" || type === "sph_series";
+      });
     },
     attrsDialogTitle() {
       return this.attrsHasSph ? "设置第三方属性" : "确认发布账号";
@@ -953,6 +975,18 @@ export default {
     platformVideoLinkNeedsValue(data) {
       const info = this.getPlatformVideoLinkTypeInfo(data);
       return Boolean(info && info.inputKind !== "none");
+    },
+    /** 商品有「橱窗选择 + 手动编号」双入口，其他类型（小程序短剧 / 视频号剧集等）只需一个编号输入框 */
+    platformVideoLinkIsProduct(data) {
+      return this.getPlatformVideoLinkType(data.id, data.pt) === "product";
+    },
+    platformVideoLinkPlaceholder(data) {
+      const info = this.getPlatformVideoLinkTypeInfo(data);
+      return (info && info.placeholder) || "请输入编号";
+    },
+    platformVideoLinkMaxLength(data) {
+      const info = this.getPlatformVideoLinkTypeInfo(data);
+      return (info && info.maxLength) || 64;
     },
     getPlatformProductOptions(nodeId) {
       return this.platformProductOptions[nodeId] || [];
@@ -1599,8 +1633,6 @@ export default {
               republishCount: oldRepublish + 1,
               publishMode: effectiveMode.publishMode,
               publishToDraft: effectiveMode.publishToDraft,
-              // 重发开始即清掉上次失败截图，避免显示的是上一轮的旧画面
-              failScreenshot: "",
               publishStatus: effectiveMode.publishToDraft
                 ? "drafting"
                 : "publishing",
@@ -2024,6 +2056,8 @@ export default {
               useRealBrowser: Boolean(p.useRealBrowser),
               publishMode: effectiveMode.publishMode,
               publishToDraft: effectiveMode.publishToDraft,
+              // 重发开始即清掉上次失败截图，避免显示的是上一轮的旧画面
+              failScreenshot: "",
               publishAttemptCount: 1,
               republishCount: 0,
               publishSuccessCount: 0,
@@ -2161,6 +2195,10 @@ export default {
 }
 .attrs-product-id {
   width: 160px;
+}
+.attrs-link-value {
+  width: 220px;
+  margin-left: 6px;
 }
 .attrs-unsupported {
   color: #909399;
