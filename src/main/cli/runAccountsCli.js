@@ -4,17 +4,8 @@ import path from "path";
 import fs from "fs";
 import { app, session } from "electron";
 import ptConfig from "../config/ptConfig";
-
-const LOGIN_COOKIE_RULE = {
-  抖音: c => c.name === "passport_assist_user" && !!c.value,
-  百家号: c => c.name === "BDUSS" && !!c.value,
-  头条: c => c.name === "odin_tt" && c.value && c.value.length > 65,
-  视频号: c => c.name === "sessionid" && !!c.value,
-  番茄视频: c => c.name === "sessionid" && !!c.value,
-  哔哩哔哩: c => c.name === "SESSDATA" && !!c.value,
-  快手: c => c.name === "userId" && !!c.value,
-  掘金: c => c.name === "passport_csrf_token" && !!c.value && c.value.length > 10,
-};
+import { evaluateLoginCookies } from "../../shared/loginState.js";
+import { probeSphSession } from "../services/sphAuthProbe.js";
 
 function getAccountsDir() {
   const documents = app.getPath("documents");
@@ -50,10 +41,6 @@ function readAccounts() {
 }
 
 async function probeLogin(account) {
-  const rule = LOGIN_COOKIE_RULE[account.pt];
-  if (!rule) {
-    return { loggedIn: false, reason: "未知平台", expireMs: null };
-  }
   const partition = account.partition || `persist:${String(account.phone).split("-")[0]}${account.pt}`;
   const cfg = ptConfig[account.pt];
   const probeUrl = account.url || (cfg && (cfg.listIndex || cfg.upload || cfg.index));
@@ -63,13 +50,22 @@ async function probeLogin(account) {
   try {
     const ses = session.fromPartition(partition.split("-")[0]);
     const cookies = await ses.cookies.get({ url: probeUrl });
-    const hit = cookies.find(rule);
-    if (!hit) return { loggedIn: false, reason: "无登录 cookie", expireMs: null };
-    const expireMs = hit.expirationDate ? Math.floor(hit.expirationDate * 1000) : null;
-    if (expireMs && expireMs < Date.now()) {
-      return { loggedIn: false, reason: "cookie 已过期", expireMs };
+    // 与 GUI 侧 getCookie 共用同一套判定，避免两处规则漂移
+    const verdict = evaluateLoginCookies(account.pt, cookies);
+    if (!verdict.loggedIn) return verdict;
+
+    // 视频号：cookie 存在不代表会话有效，额外做一次真实探测
+    if (account.pt === "视频号") {
+      const probed = await probeSphSession(partition);
+      if (probed.ok && probed.loggedIn === false) {
+        return {
+          loggedIn: false,
+          reason: probed.reason || "会话已失效",
+          expireMs: verdict.expireMs,
+        };
+      }
     }
-    return { loggedIn: true, reason: "", expireMs };
+    return verdict;
   } catch (e) {
     return { loggedIn: false, reason: `查询失败: ${e.message || e}`, expireMs: null };
   }
