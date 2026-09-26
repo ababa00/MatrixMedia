@@ -10,11 +10,11 @@
  *   3. 登录页 URL 识别（供导航后二次确认）
  */
 
-/** 各平台登录 cookie 规则；返回 true 表示该 cookie 可作为「已登录」凭据 */
+/** 各平台登录 cookie 规则；返回 boolean 表示该 cookie 可作为「已登录」凭据 */
 export const LOGIN_COOKIE_RULE = {
   抖音: c => c.name === "passport_assist_user" && !!c.value,
   百家号: c => c.name === "BDUSS" && !!c.value,
-  头条: c => c.name === "odin_tt" && c.value && c.value.length > 65,
+  头条: c => c.name === "odin_tt" && !!c.value && c.value.length > 65,
   视频号: c => c.name === "sessionid" && !!c.value,
   番茄视频: c => c.name === "sessionid" && !!c.value,
   哔哩哔哩: c => c.name === "SESSDATA" && !!c.value,
@@ -111,4 +111,30 @@ export function isSphSessionValid(payload) {
   if (!payload) return false;
   const code = payload.errCode != null ? payload.errCode : payload.errcode;
   return Number(code) === 0;
+}
+
+/** 各失效错误码对应的人话，便于用户判断是「重新登录」还是「换个账号」 */
+const SPH_INVALID_REASONS = {
+  300330: "视频号登录凭据无效，请重新登录",
+  300334: "视频号会话已失效（服务端已作废），请重新登录",
+};
+
+/** 把探测错误码翻成可读原因 */
+export function sphInvalidReason(errCode) {
+  return SPH_INVALID_REASONS[Number(errCode)] || "视频号会话已失效，请重新登录";
+}
+
+/** 是否为视频号登录页地址（用于识别重定向到登录页的失效会话） */
+export function isSphLoginUrl(rawUrl) {
+  const url = String(rawUrl || "");
+  if (!url) return false;
+  try {
+    const u = new URL(url);
+    return (
+      u.origin === "https://channels.weixin.qq.com" &&
+      (u.pathname === "/login.html" || u.pathname.startsWith("/login/"))
+    );
+  } catch (_) {
+    return url.startsWith("https://channels.weixin.qq.com/login");
+  }
 }

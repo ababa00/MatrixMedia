@@ -33,7 +33,9 @@ export default function () {
       }
 
       if (verdict.loggedIn) {
-        // 掘金 / 小红书等可能拿不到 expires（会话 cookie），给一个兜底有效期
+        // 命中登录 cookie 但拿不到 expires（会话 cookie，如掘金 / 小红书）时给兜底有效期：
+        // 旧实现只对掘金兜底，其它平台会写出 `expires=Invalid Date`，反而更坏。
+        // 这里统一兜底，并明确语义为「假定 90 天内有效」，不是服务端承诺。
         const expMs =
           verdict.expireMs || Date.now() + 90 * 24 * 60 * 60 * 1000;
         result = `${args.name}=true; expires=${new Date(expMs).toUTCString()}; path=/`;

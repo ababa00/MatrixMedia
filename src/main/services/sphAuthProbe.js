@@ -3,8 +3,10 @@
 import { net, session } from "electron";
 import {
   SPH_AUTH_PROBE,
+  isSphLoginUrl,
   isSphSessionInvalid,
   isSphSessionValid,
+  sphInvalidReason,
 } from "../../shared/loginState.js";
 
 const DEFAULT_TIMEOUT_MS = 12000;
@@ -19,10 +21,14 @@ const DEFAULT_TIMEOUT_MS = 12000;
  * 走传入 partition 对应的 session，因此会自动带上该分区的 cookie，
  * 不需要手工拼 Cookie 头，也不会影响其他分区。
  *
+ * partition 必须是完整值（如 `persist:sph视频号`），不要做 phone 那套
+ * `split("-")[0]` 裁剪：partition 里一旦含 `-`，裁剪后就会打在一个没有
+ * cookie 的空 session 上，服务端回 300330，把正常账号误判成未登录。
+ *
  * 网络异常一律返回 `{ ok: false }`（未知），由调用方回退到 cookie 判定，
  * 避免断网时把正常账号误判成未登录。
  *
- * @param {string} partition 如 `persist:sph视频号`
+ * @param {string} partition 完整 partition，如 `persist:sph视频号`
  * @param {number} [timeoutMs]
  * @returns {Promise<{ok:boolean, loggedIn?:boolean, errCode?:number, reason?:string}>}
  */
@@ -37,13 +43,15 @@ export function probeSphSession(partition, timeoutMs = DEFAULT_TIMEOUT_MS) {
 
     let request;
     try {
-      const ses = session.fromPartition(String(partition || "").split("-")[0]);
+      const ses = session.fromPartition(String(partition || ""));
       request = net.request({
         method: SPH_AUTH_PROBE.method,
         url: SPH_AUTH_PROBE.url,
         session: ses,
         useSessionCookies: true,
-        redirect: "follow",
+        // 用 manual 自己跟随：失效会话若被 302 到 login.html，能立刻判定未登录，
+        // 而不是拿到一坨 HTML 后 JSON 解析失败、退回 cookie 判定继续显示「已登录」。
+        redirect: "manual",
         headers: {
           "Content-Type": "application/json",
           Accept: "application/json, text/plain, */*",
@@ -64,6 +72,30 @@ export function probeSphSession(partition, timeoutMs = DEFAULT_TIMEOUT_MS) {
       done({ ok: false, reason: "探测超时" });
     }, timeoutMs);
 
+    // 302/303 到登录页 = 会话已失效。manual 模式下必须在事件内同步放行，
+    // 否则请求被取消；这里对登录页直接判失效，其余跳转照常跟随。
+    request.on("redirect", (statusCode, method, redirectUrl) => {
+      if (isSphLoginUrl(redirectUrl)) {
+        clearTimeout(timer);
+        try {
+          request.abort();
+        } catch (_) {
+          /* ignore */
+        }
+        return done({
+          ok: true,
+          loggedIn: false,
+          reason: `视频号会话已失效（${statusCode} 跳转登录页）`,
+        });
+      }
+      try {
+        request.followRedirect();
+      } catch (_) {
+        clearTimeout(timer);
+        done({ ok: false, reason: "跟随重定向失败" });
+      }
+    });
+
     request.on("response", (response) => {
       let raw = "";
       response.on("data", (chunk) => {
@@ -71,6 +103,18 @@ export function probeSphSession(partition, timeoutMs = DEFAULT_TIMEOUT_MS) {
       });
       response.on("end", () => {
         clearTimeout(timer);
+        // 兜底：万一仍拿到 HTML（例如 200 直接吐登录页），按未登录处理，
+        // 不能因为「解析失败」退回 cookie 判定而继续显示已登录。
+        const contentType = String(
+          (response.headers && response.headers["content-type"]) || ""
+        );
+        if (/text\/html/i.test(contentType)) {
+          return done({
+            ok: true,
+            loggedIn: false,
+            reason: "视频号会话已失效（返回登录页）",
+          });
+        }
         let payload = null;
         try {
           payload = JSON.parse(raw);
@@ -86,7 +130,7 @@ export function probeSphSession(partition, timeoutMs = DEFAULT_TIMEOUT_MS) {
             ok: true,
             loggedIn: false,
             errCode: Number(code),
-            reason: "视频号会话已失效（服务端已作废）",
+            reason: sphInvalidReason(Number(code)),
           });
         }
         if (isSphSessionValid(payload)) {

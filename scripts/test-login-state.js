@@ -11,15 +11,17 @@ const {
   SPH_AUTH_PROBE,
   evaluateLoginCookies,
   getCookieExpireMs,
+  isSphLoginUrl,
   isSphSessionInvalid,
   isSphSessionValid,
+  sphInvalidReason,
 } = require("../src/shared/loginState");
 
 const NOW = 1_800_000_000_000; // 固定"当前时间"，让过期判定可复现
 const FUTURE = Math.floor((NOW + 86400_000) / 1000); // 未来 1 天
 const PAST = Math.floor((NOW - 86400_000) / 1000); // 已过期 1 天
 
-/* 1) 规则表覆盖所有需要登录的平台 */
+/* 1) 规则表覆盖所有需要登录的平台，且一律返回 boolean */
 for (const pt of [
   "抖音",
   "百家号",
@@ -31,6 +33,18 @@ for (const pt of [
   "掘金",
 ]) {
   assert.strictEqual(typeof LOGIN_COOKIE_RULE[pt], "function", `${pt} 应有登录规则`);
+}
+/* 命中与未命中都必须返回 boolean（原先头条返回的是 string，与 JSDoc 不符） */
+for (const pt of ["头条", "掘金"]) {
+  const rule = LOGIN_COOKIE_RULE[pt];
+  const hit = pt === "头条"
+    ? rule({ name: "odin_tt", value: "x".repeat(66) })
+    : rule({ name: "passport_csrf_token", value: "x".repeat(11) });
+  const miss = rule({ name: "nothing", value: "x".repeat(66) });
+  assert.strictEqual(typeof hit, "boolean", `${pt} 命中应返回 boolean`);
+  assert.strictEqual(typeof miss, "boolean", `${pt} 未命中应返回 boolean`);
+  assert.strictEqual(hit, true);
+  assert.strictEqual(miss, false);
 }
 
 /* 2) 视频号：sessionid 存在且未过期 → 已登录 */
@@ -166,5 +180,67 @@ assert.strictEqual(isSphSessionValid({ errcode: 0 }), true);
 assert.strictEqual(isSphSessionValid({ errCode: 300330 }), false);
 assert.strictEqual(isSphSessionValid({ errCode: 300334 }), false);
 assert.strictEqual(isSphSessionValid(null), false);
+
+/* 13) 失效原因文案：两个错误码应给出不同提示 */
+{
+  const r330 = sphInvalidReason(300330);
+  const r334 = sphInvalidReason(300334);
+  assert.ok(r330 && r334, "两个失效码都应有文案");
+  assert.notStrictEqual(r330, r334, "300330 / 300334 文案应可区分");
+  assert.ok(r330.includes("重新登录"), "文案应提示重新登录");
+  assert.ok(r334.includes("重新登录"), "文案应提示重新登录");
+  // 未知码要有兜底
+  assert.ok(sphInvalidReason(999999).length > 0, "未知码应有兜底文案");
+  assert.ok(sphInvalidReason(undefined).length > 0, "空值应有兜底文案");
+}
+
+/* 14) 登录页 URL 识别（用于 302 判定） */
+assert.strictEqual(
+  isSphLoginUrl("https://channels.weixin.qq.com/login.html"),
+  true
+);
+assert.strictEqual(
+  isSphLoginUrl("https://channels.weixin.qq.com/login/xxx"),
+  true
+);
+assert.strictEqual(
+  isSphLoginUrl("https://channels.weixin.qq.com/login.html?from=abc"),
+  true
+);
+assert.strictEqual(
+  isSphLoginUrl("https://channels.weixin.qq.com/platform/post/list"),
+  false
+);
+assert.strictEqual(
+  isSphLoginUrl("https://channels.weixin.qq.com/platform/post/create"),
+  false
+);
+assert.strictEqual(isSphLoginUrl("https://other.com/login.html"), false);
+assert.strictEqual(isSphLoginUrl(""), false);
+assert.strictEqual(isSphLoginUrl(null), false);
+assert.strictEqual(isSphLoginUrl(undefined), false);
+
+/* 15) partition 不得被 split("-") 裁剪（探测与 cookie 判定必须同一会话） */
+{
+  const fs = require("fs");
+  const path = require("path");
+  const root = path.join(__dirname, "..");
+  const probeSrc = fs.readFileSync(
+    path.join(root, "src/main/services/sphAuthProbe.js"),
+    "utf8"
+  );
+  assert.ok(
+    !/session\.fromPartition\([^)]*\.split\("-"\)/.test(probeSrc),
+    "sphAuthProbe 不应裁剪 partition：含 `-` 时会打到空 session，把正常账号误判成未登录"
+  );
+  const cliSrc = fs.readFileSync(
+    path.join(root, "src/main/cli/runAccountsCli.js"),
+    "utf8"
+  );
+  assert.ok(
+    !/session\.fromPartition\([^)]*\.split\("-"\)/.test(cliSrc),
+    "runAccountsCli 不应裁剪 partition"
+  );
+}
 
 console.log("test-login-state passed");

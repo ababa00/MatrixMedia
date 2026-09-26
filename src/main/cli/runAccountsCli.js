@@ -48,7 +48,9 @@ async function probeLogin(account) {
     return { loggedIn: false, reason: "缺少探测 URL", expireMs: null };
   }
   try {
-    const ses = session.fromPartition(partition.split("-")[0]);
+    // partition 用完整值：它本身不含 phone 的 `-` 后缀，再裁一次会打到
+    // 空 session 上，导致 cookie 判定与探测分属两个会话
+    const ses = session.fromPartition(partition);
     const cookies = await ses.cookies.get({ url: probeUrl });
     // 与 GUI 侧 getCookie 共用同一套判定，避免两处规则漂移
     const verdict = evaluateLoginCookies(account.pt, cookies);
